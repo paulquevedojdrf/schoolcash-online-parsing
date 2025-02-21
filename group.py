@@ -22,7 +22,7 @@ def main(args):
         data = [row for row in reader]
 
     # Filter out entries we dont care about
-    data = [x for x in data if x['Teacher'] not in ("",None)]
+    data = [x for x in data if x['Teacher'] not in ("",None) and x['First Name'] not in ("",None)]
     # Sort by teacher, then by first name and finally by last name
     data = sorted(data, key=lambda x: (x['Teacher'], x['First Name'], x['Last Name']))
 
