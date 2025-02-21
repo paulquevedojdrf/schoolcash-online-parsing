@@ -5,7 +5,7 @@ A set of simple python scripts to summarize the order counts per student given a
 Parse the csv file exported from SCO
 
 ```sh
-python3 parse-sco.py --src sco.csv --out orders.csv
+python parse-sco.py --src sco.csv --out orders.csv
 ```
 
 Sample Output:
@@ -17,6 +17,13 @@ Richard,Nixon,Frazzle,,3,,2,,Online
 ```
 
 Group all students in the generated report by classroom teacher and summarize the order totals
+
+```sh
+python group.py --src orders.csv --out orders-by-class.csv
+```
+
+Sample Output:
+
 ```csv
 First Name,Last Name,Teacher,Cheese,Pepperoni,Halal Pepperoni,Juice Box,Yop Yoghurt,Payment
 Nick,Carter,Frazzle,1,1,,,,Online
