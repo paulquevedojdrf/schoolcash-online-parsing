@@ -8,78 +8,142 @@ Bob,Dole,Frizzle,2,,1,,,Online
 
 '''
 import csv
+from typing import NamedTuple
 from pathlib import Path
 from argparse import ArgumentParser
 
-def sort_order_options(items):
-    '''
-    This sorts the list of orderable items into the desired order
-    The desired order doesnt have to match the entries in the csv exactly.
-    Just be close enough
-    '''
-    order = ['cheese', 'pepperoni', 'halal', 'juice', 'yop']
-    order_dict = {word.lower(): i for i, word in enumerate(order)}
+class OrderEntry(NamedTuple):
+    student_number: int
+    first_name: str
+    last_name: str
+    class_name: str
+    items: list
 
-    # Sorting key: find first word in each item that matches the order list
-    def sort_key(item):
-        words = item.lower().split()  # Split item into words
-        for word in words:
-            if word in order_dict:  # If any word is in order_dict, use its index
-                return order_dict[word]
-        return len(order)  # Default to end if no match
 
-    return sorted(items, key=sort_key)
+class BaseParser:
+    def __init__(self, data, item_options):
+        self.data = data
+        self.item_options = self._sort_item_options(item_options)
 
-def parse_order_options(row):
+    def _sort_item_options(self, options):
+        '''
+        This sorts the list of orderable items into the desired order
+        The desired order doesnt have to match the entries in the csv exactly.
+        Just be close enough
+        '''
+        order = ['cheese', 'pepperoni', 'halal', 'juice', 'yop']
+        order_dict = {word.lower(): i for i, word in enumerate(order)}
+
+        # Sorting key: find first word in each item that matches the order list
+        def sort_key(item):
+            words = item.lower().split()  # Split item into words
+            for word in words:
+                if word in order_dict:  # If any word is in order_dict, use its index
+                    return order_dict[word]
+            return len(order)  # Default to end if no match
+
+        return sorted(options, key=sort_key)
+
+
+    def _parse_row(self, row) -> OrderEntry:
+        raise NotImplementedError('Must subclass')
+
+    def parse(self):
+        output = {}
+
+        for row in self.data:
+            order = self._parse_row(row)
+
+            if order.student_number in output:
+                entry = output[order.student_number]
+            else:
+                entry = {
+                    'First Name': order.first_name,
+                    'Last Name': order.last_name,
+                    'Teacher':  order.class_name,
+                }
+                for option in self.item_options:
+                    entry[option] = 0
+
+                entry['Payment'] = 'Online'
+
+            for item in order.items:
+                entry[item] += 1
+
+            output[order.student_number] = entry
+
+        # Replace zero orders with empty strings
+        for entry in output.values():
+            for option in self.item_options:
+                if entry[option] == 0:
+                    entry[option] = ''
+
+        return output
+
+class Type1Parser(BaseParser):
     '''
-    Gets the list of items ordered.
-    This is expected to be in the field "Options"
+    In this particular export format the orders are lumped together in the field "Options"
     The field contains a comma seperate list of orders
     For example:
         Cheese,Juice Box, Pepperoni
     '''
-    return [x.strip() for x in row['Options'].split(',')]
+    def __init__(self, data):
+        options = []
+        for row in data:
+            options.extend([x.strip() for x in row['Options'].split(',')])
+        super().__init__(data, list(set(options)))
+
+    def _parse_row(self, row) -> OrderEntry:
+        student_name = row['Student Name'].split(',')
+        order = OrderEntry(
+            student_number = row['Student Number'],
+            first_name = student_name[1].strip(),
+            last_name = student_name[0].strip(),
+            class_name = row['HomeroomName'].split('-')[1].strip(),
+            items = [x.strip() for x in row['Options'].split(',')]
+        )
+        return order
+
+class Type2Parser(BaseParser):
+    '''
+    In this particular export format the orders are grouped by the field 'choiceName'
+    which contains only a single item type. Each order has a specified 'quantity'.
+
+    For example:
+        , choiceName, quantity,
+        , Juice Box, 2
+    '''
+    def __init__(self, data):
+        options = list(set([x['choiceName'].strip() for x in data]))
+        super().__init__(data, options)
+
+    def _parse_row(self, row) -> OrderEntry:
+        quantity = int(row['quantity'])
+        student_name = row['studentName'].split(',')
+        order = OrderEntry(
+            student_number = row['studentNumber'],
+            first_name = student_name[1].strip(),
+            last_name = student_name[0].strip(),
+            class_name = row['homeroomName'].split('-')[1].strip(),
+            items = [row['choiceName']] * quantity,
+        )
+        return order
+
 
 def main(args):
     with open(Path(args.src).resolve()) as f:
         reader = csv.DictReader(f)
         data = [row for row in reader]
 
-    # Get the set of all unique order options that can be made by a student
-    order_options = []
-    for row in data:
-        order_options.extend(parse_order_options(row))
-    order_options = sort_order_options(set(order_options))
+    if 'Options' in data[0].keys():
+        parser = Type1Parser(data)
+    elif 'choiceName' in data[0].keys():
+        parser = Type2Parser(data)
+    else:
+        print(data[0])
+        raise RuntimeError('unknown formatting')
 
-    # Accumulate the total order for every student in the school
-    # Keep only the fields that are of actual interest, strip the rest
-    # of the noise and garbage in the SCO output
-    output = {}
-    for row in data:
-        student_number = row['Student Number']
-        if student_number in output:
-            entry = output[student_number]
-        else:
-            student_name = row['Student Name'].split(',')
-            entry = {
-                'First Name': student_name[1].strip(),
-                'Last Name': student_name[0].strip(),
-                'Teacher':  row['HomeroomName'].split('-')[1].strip(),
-            }
-            for option in order_options:
-                entry[option] = 0
-            entry['Payment'] = 'Online'
-
-        for order in parse_order_options(row):
-            entry[order] += 1
-
-        output[student_number] = entry
-
-    # Replace zero orders with empty strings
-    for entry in output.values():
-        for order in order_options:
-            if entry[order] == 0:
-                entry[order] = ''
+    output = parser.parse()
 
     with open(Path(args.out).resolve(), 'w') as f:
         output = list(output.values())
