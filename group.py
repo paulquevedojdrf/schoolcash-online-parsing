@@ -9,7 +9,6 @@ import csv
 from pathlib import Path
 from collections import defaultdict
 from argparse import ArgumentParser
-from pprint import pprint
 
 try:
     from teacher_order import teacher_order
@@ -53,7 +52,7 @@ def main(args):
                     count = int(value)
                     if count:
                         sums[key] += count
-                except:
+                except Exception:
                     pass
 
         cls.append(make_empty_entry(cls[0]))
