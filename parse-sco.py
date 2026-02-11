@@ -9,7 +9,8 @@ Bob,Dole,Frizzle,2,,1,,,Online
 '''
 import re
 import csv
-from typing import NamedTuple
+import dataclasses
+from typing import NamedTuple, Dict, List, Union
 from pathlib import Path
 from argparse import ArgumentParser
 
@@ -20,36 +21,60 @@ class OrderEntry(NamedTuple):
     class_name: str
     items: list
 
+@dataclasses.dataclass
+class StudentEntry:
+    first_name: str
+    last_name: str
+    teacher: str
+    orders: Dict[str, int] = dataclasses.field(default_factory=dict)
+    payment_method: str = "Online"
+
+    def as_pretty_dict(self) -> Dict[str, Union[str,int]]:
+        """
+        Convert to a pretty dictionary for generating the final csv file
+        """
+        pretty: Dict[str, Union[str,int]] = {
+            "First Name": self.first_name,
+            "Last Name": self.last_name,
+            "Teacher": self.teacher,
+        }
+        for order,count in self.orders.items():
+            pretty[order] = count if count > 0 else ""
+
+        pretty["Payment"] = self.payment_method
+
+        return pretty
+
 
 class BaseParser:
-    def __init__(self, data, item_options):
+    def __init__(self, data, item_options: List[str]):
         self.data = data
         self.item_options = self._sort_item_options(item_options)
 
-    def _sort_item_options(self, options):
+    def _sort_item_options(self, options: List[str]) -> List[str]:
         '''
         This sorts the list of orderable items into the desired order
         The desired order doesnt have to match the entries in the csv exactly.
         Just be close enough
         '''
         order = ['cheese', 'pepperoni', 'halal', 'juice', 'yop']
-        order_dict = {word.lower(): i for i, word in enumerate(order)}
+        order_dict: Dict[str,int] = {word.lower(): i for i, word in enumerate(order)}
 
         # Sorting key: find first word in each item that matches the order list
-        def sort_key(item):
+        def sort_key(item: str) -> int:
             words = item.lower().split()  # Split item into words
             for word in words:
                 if word in order_dict:  # If any word is in order_dict, use its index
                     return order_dict[word]
             return len(order)  # Default to end if no match
 
-        return sorted(options, key=sort_key)
+        return list(sorted(options, key=sort_key))
 
 
     def _parse_row(self, row) -> OrderEntry:
         raise NotImplementedError('Must subclass')
 
-    def parse_teacher_from_class_name(self, value: str):
+    def parse_teacher_from_class_name(self, value: str) -> str:
         '''
         Crazy class names with the teacher name embedded in there somewhere
             - HRMJK-RJSKA-T-Name
@@ -67,8 +92,12 @@ class BaseParser:
         return parts[1].strip()
 
 
-    def parse(self):
-        output = {}
+    def parse(self) -> Dict[int, StudentEntry]:
+        """
+        Parse csv data loaded as a dict into a dictionary of StudentEntry's keyed
+        by student ID
+        """
+        output: Dict[int, StudentEntry] = {}
 
         for row in self.data:
             order = self._parse_row(row)
@@ -76,26 +105,18 @@ class BaseParser:
             if order.student_number in output:
                 entry = output[order.student_number]
             else:
-                entry = {
-                    'First Name': order.first_name,
-                    'Last Name': order.last_name,
-                    'Teacher':  order.class_name,
-                }
+                entry = StudentEntry(
+                    first_name=order.first_name,
+                    last_name=order.last_name,
+                    teacher=order.class_name,
+                )
                 for option in self.item_options:
-                    entry[option] = 0
-
-                entry['Payment'] = 'Online'
+                    entry.orders[option] = 0
 
             for item in order.items:
-                entry[item] += 1
+                entry.orders[item] += 1
 
             output[order.student_number] = entry
-
-        # Replace zero orders with empty strings
-        for entry in output.values():
-            for option in self.item_options:
-                if entry[option] == 0:
-                    entry[option] = ''
 
         return output
 
@@ -107,12 +128,12 @@ class Type1Parser(BaseParser):
         Cheese,Juice Box, Pepperoni
     '''
     def __init__(self, data):
-        options = []
+        options: List[str] = []
         for row in data:
             options.extend([x.strip() for x in row['Options'].split(',')])
         super().__init__(data, list(set(options)))
 
-    def _parse_row(self, row) -> OrderEntry:
+    def _parse_row(self, row: Dict) -> OrderEntry:
         student_name = row['Student Name'].split(',')
         order = OrderEntry(
             student_number = row['Student Number'],
@@ -133,10 +154,10 @@ class Type2Parser(BaseParser):
         , Juice Box, 2
     '''
     def __init__(self, data):
-        options = list(set([x['choiceName'].strip() for x in data]))
+        options: List[str] = list(set([x['choiceName'].strip() for x in data]))
         super().__init__(data, options)
 
-    def _parse_row(self, row) -> OrderEntry:
+    def _parse_row(self, row: Dict) -> OrderEntry:
         quantity = int(row['quantity'])
         student_name = row['studentName'].split(',')
         order = OrderEntry(
@@ -165,10 +186,10 @@ def main(args):
     output = parser.parse()
 
     with open(Path(args.out).resolve(), 'w') as f:
-        output = list(output.values())
-        writer = csv.DictWriter(f, fieldnames=output[0].keys())
+        student_entries = [x.as_pretty_dict() for x in output.values()]
+        writer = csv.DictWriter(f, fieldnames=student_entries[0].keys())
         writer.writeheader()
-        writer.writerows(output)
+        writer.writerows(student_entries)
 
 
 if __name__ == "__main__":
