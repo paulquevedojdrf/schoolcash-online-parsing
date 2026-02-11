@@ -7,6 +7,7 @@ First Name,Last Name,Teacher,Cheese,Pepperoni,Halal Pepperoni,Juice Box,Yop Yogh
 Bob,Dole,Frizzle,2,,1,,,Online
 
 '''
+import re
 import csv
 from typing import NamedTuple
 from pathlib import Path
@@ -47,6 +48,24 @@ class BaseParser:
 
     def _parse_row(self, row) -> OrderEntry:
         raise NotImplementedError('Must subclass')
+
+    def parse_teacher_from_class_name(self, value: str):
+        '''
+        Crazy class names with the teacher name embedded in there somewhere
+            - HRMJK-RJSKA-T-Name
+            - JRM45-RGR45B-Name
+            - RGR45B-Name
+        '''
+        parts = value.split('-')
+        for part in parts:
+            # Prefer the piece with lowercase letters in it. Its probably a name
+            if re.search(r'[a-z]', part):
+                return part.strip()
+
+        # Default to the second part :shrug:
+        # No rhyme or reason to how they structure these. its a crapshoot
+        return parts[1].strip()
+
 
     def parse(self):
         output = {}
@@ -99,7 +118,7 @@ class Type1Parser(BaseParser):
             student_number = row['Student Number'],
             first_name = student_name[1].strip(),
             last_name = student_name[0].strip(),
-            class_name = row['HomeroomName'].split('-')[1].strip(),
+            class_name = self.parse_teacher_from_class_name(row['HomeroomName']),
             items = [x.strip() for x in row['Options'].split(',')]
         )
         return order
@@ -124,7 +143,7 @@ class Type2Parser(BaseParser):
             student_number = row['studentNumber'],
             first_name = student_name[1].strip(),
             last_name = student_name[0].strip(),
-            class_name = row['homeroomName'].split('-')[1].strip(),
+            class_name = self.parse_teacher_from_class_name(row['homeroomName']),
             items = [row['choiceName']] * quantity,
         )
         return order
