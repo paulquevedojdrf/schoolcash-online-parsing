@@ -76,9 +76,9 @@ class BaseParser:
     def _parse_row(self, row) -> OrderEntry:
         raise NotImplementedError("Must subclass")
 
-    def parse_teacher_from_class_name(self, value: str) -> str:
+    def parse_class_name_from_homeroom(self, value: str) -> str:
         """
-        Crazy class names with the teacher name embedded in there somewhere
+        Extract the teacher name embedded in these crazy homeroom name fields
             - HRMJK-RJSKA-T-Name
             - JRM45-RGR45B-Name
             - RGR45B-Name
@@ -142,7 +142,7 @@ class Type1Parser(BaseParser):
             student_number=row["Student Number"],
             first_name=student_name[1].strip(),
             last_name=student_name[0].strip(),
-            class_name=self.parse_teacher_from_class_name(row["HomeroomName"]),
+            class_name=self.parse_class_name_from_homeroom(row["HomeroomName"]),
             items=[x.strip() for x in row["Options"].split(",")],
         )
         return order
@@ -169,7 +169,7 @@ class Type2Parser(BaseParser):
             student_number=row["studentNumber"],
             first_name=student_name[1].strip(),
             last_name=student_name[0].strip(),
-            class_name=self.parse_teacher_from_class_name(row["homeroomName"]),
+            class_name=self.parse_class_name_from_homeroom(row["homeroomName"]),
             items=[row["choiceName"]] * quantity,
         )
         return order
