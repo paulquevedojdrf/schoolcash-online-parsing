@@ -1,0 +1,13 @@
+__pycache__/
+*.egg-info/
+.tox/
+.mypy_cache/
+.pytest_cache/
+build/
+dist/
+# Real order exports contain student personal information; keep them out of the repo.
+*.xlsx
+*.csv
+# Fake fixture reports used by the tests.
+!tests/data/*.csv
+!tests/data/*.xlsx
