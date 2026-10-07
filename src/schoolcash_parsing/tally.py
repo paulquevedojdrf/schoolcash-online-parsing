@@ -1,9 +1,13 @@
 """Build a per-student order tally from School Cash Online item order reports.
 
-Each input report (.xlsx or .csv) holds one row per order with the ordered items encoded in the
-``Options`` column, e.g. ``2 Cheese Slices, 1 'Yop' Yogurt Drink``. Orders are coalesced by student
-number so that students sharing a name are never merged. When one report is a subset of another
-(e.g. an earlier export of a revised list) the subset is ignored so its orders are not counted twice.
+Each input report (.xlsx or .csv) is in one of two layouts. Order reports hold one row per order with the
+ordered items encoded in the ``Options`` column, e.g. ``2 Cheese Slices, 1 'Yop' Yogurt Drink``. Itemised
+reports hold one row per chosen item, with ``Choice Name``, ``Choice Cost`` and ``Quantity`` columns; these
+rows are mapped onto the order columns on load so the rest of the tally treats both layouts alike.
+
+Orders are coalesced by student number so that students sharing a name are never merged. When one report is a
+subset of another (e.g. an earlier export of a revised list) the subset is ignored so its orders are not counted
+twice.
 """
 
 from __future__ import annotations
@@ -27,6 +31,12 @@ COL_HOMEROOM = 'HomeroomName'
 COL_OPTIONS = 'Options'
 COL_PAID = 'Paid Amount'
 COL_TOTAL_PAID = 'Total Paid Amount'
+
+# Itemised report columns.
+COL_CHOICE = 'Choice Name'
+COL_CHOICE_COST = 'Choice Cost'
+COL_QUANTITY = 'Quantity'
+COL_HOMEROOM_ITEMISED = 'Homeroom'
 
 # Report-level summary columns repeat the same value on every row and differ between exports of the
 # same list, so they are excluded when deciding whether two rows describe the same order.
@@ -123,6 +133,18 @@ def _rows_from_table(table: Iterable[Sequence[object]]) -> list[Row]:
     return rows
 
 
+def _normalise_itemised_row(row: Row) -> Row:
+    """Map an itemised row onto the order columns: the choice repeated Quantity times, paid cost x quantity."""
+    if COL_OPTIONS in row or COL_CHOICE not in row:
+        return row
+    quantity = int(row.get(COL_QUANTITY) or 1)
+    normalised = dict(row)
+    normalised[COL_OPTIONS] = ', '.join([row[COL_CHOICE]] * quantity)
+    normalised[COL_PAID] = str(parse_money(row.get(COL_CHOICE_COST, '')) * quantity)
+    normalised.setdefault(COL_HOMEROOM, row.get(COL_HOMEROOM_ITEMISED, ''))
+    return normalised
+
+
 def load_report(path: Path) -> Report:
     """Load an order report from an .xlsx (first worksheet) or .csv file."""
     suffix = path.suffix.lower()
@@ -137,6 +159,9 @@ def load_report(path: Path) -> Report:
             rows = _rows_from_table(csv.reader(handle))
     else:
         raise ValueError(f'{path}: unsupported file type {suffix!r}; expected .xlsx or .csv')
+    rows = [_normalise_itemised_row(row) for row in rows]
+    if rows and COL_OPTIONS not in rows[0]:
+        raise ValueError(f'{path}: unrecognised report layout; expected an {COL_OPTIONS!r} or {COL_CHOICE!r} column')
     return Report(path=path, rows=rows)
 
 

@@ -12,6 +12,7 @@ range 900000000-999999999. None of it belongs to a real student.
 | `list-b.csv` | 7 orders, `Pizza Lunch ***revised***`, quantified Options format (`2 Cheese Slices`). Total $40. |
 | `mispriced.csv` | First 3 orders of list A, except George Washington (914673169) paid $4 for a $3 order. |
 | `bad-total.csv` | First 3 orders of list A ($15), with the Total Paid Amount column set to $99. |
+| `itemised.csv` | 4 rows in the itemised layout (one row per choice: `Choice Name`, `Choice Cost`, `Quantity`, `Homeroom`). Washington has two rows; Jefferson's `2 Halal Pepperoni Slices` has Quantity 2. Total $25. |
 | `expected-tally.csv` | The tally for `list-a` + `list-b`, i.e. the output of `schoolcash-tally list-a.xlsx list-b-early.csv list-b.csv`. |
 
 Cases worth checking by eye in `expected-tally.csv`:

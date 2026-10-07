@@ -107,6 +107,64 @@ def test_load_report_rejects_unknown_extension(tmp_path: Path) -> None:
         tally.load_report(path)
 
 
+def test_itemised_report_is_tallied() -> None:
+    """Itemised rows (one per choice) coalesce per student, with the choice's slice count times Quantity."""
+    # Given: itemised.csv, where Washington has two choice rows and Jefferson bought "2 Halal Pepperoni Slices" x2
+    report = load('itemised.csv')
+
+    # When: the tally is built
+    result = tally.build_tally(report.rows)
+
+    # Then: counts come from the choice text and quantity, and the teacher from the Homeroom column
+    assert result['930228762'].counts == {
+        'Cheese': 0,
+        'Pepperoni': 3,
+        'Halal Pepperoni': 0,
+        'Juice Box': 0,
+        'Yop Yoghurt': 0,
+    }
+    assert result['914673169'].counts == {
+        'Cheese': 1,
+        'Pepperoni': 0,
+        'Halal Pepperoni': 0,
+        'Juice Box': 1,
+        'Yop Yoghurt': 0,
+    }
+    assert result['998083545'].counts == {
+        'Cheese': 0,
+        'Pepperoni': 0,
+        'Halal Pepperoni': 4,
+        'Juice Box': 0,
+        'Yop Yoghurt': 0,
+    }
+    assert result['998083545'].teacher == 'Laurier'
+
+
+def test_itemised_report_validates() -> None:
+    """Each itemised row's Choice Cost x Quantity reconciles with its items."""
+    # Given: itemised.csv, $9 + $3 + $1 + 2 x $6 = $25
+    report = load('itemised.csv')
+
+    # When: the tally is built and validated
+    result = tally.validate([report], tally.build_tally(report.rows))
+
+    # Then: nothing is flagged and the totals agree
+    assert result.ok
+    assert result.tally_total == result.paid_total == Decimal(25)
+
+
+def test_load_report_rejects_unknown_layout(tmp_path: Path) -> None:
+    """A report with neither an Options nor a Choice Name column is an error, not an empty tally."""
+    # Given: a CSV with a student number but no item column
+    path = tmp_path / 'orders.csv'
+    path.write_text('Student Number,Student Name\n930228762,"Lincoln, Abraham"\n')
+
+    # When: it is loaded
+    # Then: a ValueError names the layout problem
+    with pytest.raises(ValueError, match='unrecognised report layout'):
+        tally.load_report(path)
+
+
 def test_subset_report_is_dropped() -> None:
     """list-b-early.csv is an earlier export of list-b.csv and is ignored."""
     # Given: list A, the early export of list B (5 orders, total 28) and the final list B (7 orders, total 40)
